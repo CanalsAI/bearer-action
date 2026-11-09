@@ -67,12 +67,18 @@ cp "$FAKE_DOWNLOAD" "$output"
     requestCount() {
       return existsSync(requests) ? readFileSync(requests, 'utf8').trim().split('\n').length : 0;
     },
+    releaseData(version = '2.1.3', digest = checksum, ageDays = 30) {
+      return {
+        tag_name: `v${version}`,
+        draft: false,
+        prerelease: false,
+        published_at: new Date(Date.now() - ageDays * 24 * 60 * 60 * 1000).toISOString().replace(/\.\d{3}Z$/, 'Z'),
+        assets: [{ name: `bearer_${version}_linux_amd64.tar.gz`, digest: `sha256:${digest}` }],
+      };
+    },
     release(version = '2.1.3', digest = checksum) {
       const file = join(root, `release-${version}.json`);
-      writeFileSync(file, JSON.stringify({
-        tag_name: `v${version}`,
-        assets: [{ name: `bearer_${version}_linux_amd64.tar.gz`, digest: `sha256:${digest}` }],
-      }));
+      writeFileSync(file, JSON.stringify(this.releaseData(version, digest)));
       return file;
     },
   };
@@ -126,6 +132,32 @@ test('retains a previously validated release when refresh fails', t => {
   assert.equal(result.status, 0);
   assert.match(result.stdout, /last validated cached release/);
   assert.match(f.outputs().url, /\/v2\.1\.3\//);
+});
+
+test('selects the highest eligible version while quarantining new releases and drafts', t => {
+  const f = fixture(t);
+  const candidates = [
+    f.releaseData('2.1.9'),
+    f.releaseData('2.1.10', 'a'.repeat(64), 8),
+    f.releaseData('2.1.11', 'b'.repeat(64), 1),
+    { ...f.releaseData('3.0.0'), draft: true },
+    { ...f.releaseData('4.0.0'), prerelease: true },
+  ];
+  const response = join(f.root, 'releases.json');
+  writeFileSync(response, JSON.stringify(candidates));
+  assert.equal(f.run('download-info.sh', { FAKE_DOWNLOAD: response }).status, 0);
+  assert.match(f.outputs().url, /\/v2\.1\.10\//);
+});
+
+test('rejects a quarantined release even when its daily cache key matches', t => {
+  const f = fixture(t);
+  const response = join(f.root, 'young-release.json');
+  writeFileSync(response, JSON.stringify(f.releaseData('2.1.4', 'a'.repeat(64), 1)));
+  writeFileSync(f.env.BEARER_RELEASE_FILE, readFileSync(response));
+  assert.notEqual(f.run('download-info.sh', {
+    BEARER_RELEASE_CACHE_HIT: 'true', FAKE_DOWNLOAD: response,
+  }).status, 0);
+  assert.deepEqual(f.outputs(), {});
 });
 
 test('fails closed when neither the response nor the cached release is valid', t => {

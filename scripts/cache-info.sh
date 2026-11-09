@@ -20,12 +20,16 @@ esac
 
 release_ref=latest
 [[ "$version" == latest ]] || release_ref="tags/v${version}"
-prefix="bearer-release-v1-${os}-${arch}-${version}-"
+prefix="bearer-release-v2-${os}-${arch}-${version}-"
 today=$(date -u +%F)
 {
   echo "platform=${os}_${arch}"
   echo "release-file=$RUNNER_TEMP/bearer-downloads/release-${os}-${arch}-${version}.json"
-  echo "release-url=https://api.github.com/repos/Bearer/bearer/releases/${release_ref}"
+  if [[ "$version" == latest ]]; then
+    echo "release-url=https://api.github.com/repos/Bearer/bearer/releases?per_page=100"
+  else
+    echo "release-url=https://api.github.com/repos/Bearer/bearer/releases/${release_ref}"
+  fi
   echo "release-prefix=$prefix"
   echo "release-key=${prefix}${today}"
   echo "rules-directory=${TMPDIR:-/tmp}/bearer-rules"

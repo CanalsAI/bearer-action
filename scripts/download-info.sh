@@ -2,14 +2,26 @@
 set -euo pipefail
 
 release_info() {
-  jq -er --arg platform "$BEARER_PLATFORM" '
-    .tag_name as $tag |
-    if ($tag | test("^v[0-9]+\\.[0-9]+\\.[0-9]+$")) then
+  local cutoff
+  cutoff=$(($(date -u +%s) - 8 * 24 * 60 * 60))
+  jq -er --arg platform "$BEARER_PLATFORM" --argjson cutoff "$cutoff" '
+    [
+      (if type == "array" then .[] else . end) |
+      select(.draft == false and .prerelease == false) |
+      select(.tag_name | test("^v[0-9]+\\.[0-9]+\\.[0-9]+$")) |
+      select((.published_at | fromdateiso8601) <= $cutoff) |
+      . as $release |
       .assets[] |
-      select(.name == "bearer_" + ($tag | ltrimstr("v")) + "_" + $platform + ".tar.gz") |
+      select(.name == "bearer_" + ($release.tag_name | ltrimstr("v")) + "_" + $platform + ".tar.gz") |
       select(.digest | test("^sha256:[a-f0-9]{64}$")) |
-      [$tag, .name, (.digest | ltrimstr("sha256:"))] | @tsv
-    else error("Expected a stable Bearer release with a SHA-256 digest") end
+      {
+        tag: $release.tag_name,
+        name: .name,
+        checksum: (.digest | ltrimstr("sha256:")),
+        version: ($release.tag_name | ltrimstr("v") | split(".") | map(tonumber))
+      }
+    ] | sort_by(.version) | last // error("No verified stable Bearer release is at least eight days old") |
+    [.tag, .name, .checksum] | @tsv
   ' "$1"
 }
 
