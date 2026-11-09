@@ -1,0 +1,63 @@
+name: Test
+
+on:
+  pull_request:
+  push:
+    branches: [main]
+
+permissions:
+  contents: read
+
+jobs:
+  downloads:
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@1af3b93b6815bc44a9784bd300feb67ff0d1eeb3
+      - run: shellcheck scripts/*.sh
+      - run: node --test tests/*.test.mjs
+
+  smoke:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@1af3b93b6815bc44a9784bd300feb67ff0d1eeb3
+      - name: Prepare scan target
+        run: |
+          mkdir -p "$RUNNER_TEMP/bearer-smoke/src"
+          printf 'const express = require("express");\nconst app = express();\napp.get("/", (req, res) => res.send(eval(req.query.code)));\n' > "$RUNNER_TEMP/bearer-smoke/src/app.js"
+          git -C "$RUNNER_TEMP/bearer-smoke" init -b master
+          git -C "$RUNNER_TEMP/bearer-smoke" add src/app.js
+          git -C "$RUNNER_TEMP/bearer-smoke" -c user.name=Test -c user.email=test@example.invalid commit -m fixture
+      - name: Scan target with findings
+        id: finding
+        continue-on-error: true
+        uses: ./
+        with:
+          scanner: secrets,sast
+          exit-code: 1
+          severity: medium,high,critical
+          path: ${{ runner.temp }}/bearer-smoke
+      - name: Clear the security finding
+        run: |
+          printf 'console.log("hello");\n' > "$RUNNER_TEMP/bearer-smoke/src/app.js"
+      - name: Scan with warm caches
+        id: warm
+        uses: ./
+        with:
+          scanner: secrets,sast
+          exit-code: 1
+          severity: medium,high,critical
+          path: ${{ runner.temp }}/bearer-smoke
+      - name: Check cache reuse and security failure
+        env:
+          OUTCOME: ${{ steps.finding.outcome }}
+          SCAN_EXIT_CODE: ${{ steps.finding.outputs.exit_code }}
+          BINARY_CACHE_HIT: ${{ steps.warm.outputs.binary_cache_hit }}
+          RULES_CACHE_HIT: ${{ steps.warm.outputs.rules_cache_hit }}
+          FINDINGS: ${{ steps.finding.outputs.rule_breaches }}
+        run: |
+          test "$OUTCOME" = failure
+          test "$SCAN_EXIT_CODE" = 1
+          test "$BINARY_CACHE_HIT" = true
+          test "$RULES_CACHE_HIT" = true
+          test -n "$FINDINGS"
