@@ -142,6 +142,10 @@ test('selects the highest eligible version while quarantining new releases and d
     f.releaseData('2.1.11', 'b'.repeat(64), 1),
     { ...f.releaseData('3.0.0'), draft: true },
     { ...f.releaseData('4.0.0'), prerelease: true },
+    {
+      ...f.releaseData('1.0.0'),
+      assets: [{ name: 'bearer_1.0.0_linux_amd64.tar.gz', digest: null }],
+    },
   ];
   const response = join(f.root, 'releases.json');
   writeFileSync(response, JSON.stringify(candidates));
