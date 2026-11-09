@@ -5,9 +5,9 @@ branding:
   color: "purple"
 inputs:
   version:
-    description: "Specify the Bearer version to use. This must match a Bearer release name."
+    description: "Bearer release to use. Latest is resolved daily and cached with its SHA-256."
     required: false
-    default: ""
+    default: "latest"
   scanner:
     description: "Specify the comma separated scanners e.g. --scanner secrets,sast"
     required: false
@@ -73,6 +73,12 @@ inputs:
     required: false
     default: "."
 outputs:
+  binary_cache_hit:
+    description: "Whether the verified binary archive was restored from its exact cache key."
+    value: ${{ steps.binary-cache.outputs.cache-hit }}
+  rules_cache_hit:
+    description: "Whether the current daily rules cache was restored."
+    value: ${{ steps.rules-cache.outputs.cache-hit }}
   rule_breaches:
     description: "Details of any rule breaches that occur"
     value: ${{ steps.run.outputs.rule_breaches }}
@@ -82,14 +88,57 @@ outputs:
 runs:
   using: "composite"
   steps:
+    - id: cache-info
+      shell: bash
+      env:
+        BEARER_VERSION: ${{ inputs.version }}
+      run: bash "$GITHUB_ACTION_PATH/scripts/cache-info.sh"
+    - id: release-cache
+      uses: actions/cache/restore@27d5ce7f107fe9357f9df03efb73ab90386fccae
+      with:
+        path: ${{ steps.cache-info.outputs.release-file }}
+        key: ${{ steps.cache-info.outputs.release-key }}
+        restore-keys: ${{ steps.cache-info.outputs.release-prefix }}
+    - id: downloads
+      shell: bash
+      env:
+        BEARER_RELEASE_FILE: ${{ steps.cache-info.outputs.release-file }}
+        BEARER_RELEASE_URL: ${{ steps.cache-info.outputs.release-url }}
+        BEARER_PLATFORM: ${{ steps.cache-info.outputs.platform }}
+        BEARER_RELEASE_CACHE_HIT: ${{ steps.release-cache.outputs.cache-hit }}
+        GITHUB_TOKEN: ${{ github.token }}
+      run: bash "$GITHUB_ACTION_PATH/scripts/download-info.sh"
+    - uses: actions/cache/save@27d5ce7f107fe9357f9df03efb73ab90386fccae
+      if: steps.release-cache.outputs.cache-hit != 'true'
+      with:
+        path: ${{ steps.cache-info.outputs.release-file }}
+        key: ${{ steps.cache-info.outputs.release-key }}
+    - id: binary-cache
+      uses: actions/cache/restore@27d5ce7f107fe9357f9df03efb73ab90386fccae
+      with:
+        path: ${{ steps.downloads.outputs.archive }}
+        key: ${{ steps.downloads.outputs.binary-key }}
     - shell: bash
-      run: |
-        VERSION="${{ inputs.version }}"
-        if [[ ! -z "$VERSION" ]]; then
-          VERSION="v${VERSION#v}"
-        fi
-
-        curl -sfL https://raw.githubusercontent.com/Bearer/bearer/main/contrib/install.sh | sh -s -- -b "$RUNNER_TEMP" "$VERSION"
+      env:
+        BEARER_ARCHIVE: ${{ steps.downloads.outputs.archive }}
+        BEARER_URL: ${{ steps.downloads.outputs.url }}
+        BEARER_CHECKSUM: ${{ steps.downloads.outputs.checksum }}
+      run: bash "$GITHUB_ACTION_PATH/scripts/install.sh"
+    - uses: actions/cache/save@27d5ce7f107fe9357f9df03efb73ab90386fccae
+      if: steps.binary-cache.outputs.cache-hit != 'true'
+      with:
+        path: ${{ steps.downloads.outputs.archive }}
+        key: ${{ steps.downloads.outputs.binary-key }}
+    - id: rules-cache
+      uses: actions/cache/restore@27d5ce7f107fe9357f9df03efb73ab90386fccae
+      with:
+        path: ${{ steps.cache-info.outputs.rules-directory }}
+        key: ${{ steps.cache-info.outputs.rules-key }}
+        restore-keys: ${{ steps.cache-info.outputs.rules-prefix }}
+    - shell: bash
+      env:
+        BEARER_RULES_DIRECTORY: ${{ steps.cache-info.outputs.rules-directory }}
+      run: bash "$GITHUB_ACTION_PATH/scripts/validate-rules.sh"
     - id: run
       shell: bash
       env:
@@ -113,9 +162,10 @@ runs:
         DIFF_BASE_BRANCH: ${{ fromJSON(inputs.diff) && github.base_ref || '' }}
         DEFAULT_BRANCH: ${{ github.event.repository.default_branch }}
         GITHUB_TOKEN: ${{ github.token }}
+        BEARER_SCAN_PATH: ${{ inputs.path }}
       run: |
         set +e
-        RULE_BREACHES=`$RUNNER_TEMP/bearer scan "${{ inputs.path }}"`
+        RULE_BREACHES=$("$RUNNER_TEMP/bearer" scan "$BEARER_SCAN_PATH")
         SCAN_EXIT_CODE=$?
         set -e
 
@@ -130,3 +180,14 @@ runs:
         echo "exit_code=$SCAN_EXIT_CODE" >> $GITHUB_OUTPUT
 
         exit $SCAN_EXIT_CODE
+    - id: validate-rules
+      if: always() && steps.cache-info.outcome == 'success'
+      shell: bash
+      env:
+        BEARER_RULES_DIRECTORY: ${{ steps.cache-info.outputs.rules-directory }}
+      run: bash "$GITHUB_ACTION_PATH/scripts/validate-rules.sh"
+    - uses: actions/cache/save@27d5ce7f107fe9357f9df03efb73ab90386fccae
+      if: success() && steps.rules-cache.outputs.cache-hit != 'true'
+      with:
+        path: ${{ steps.cache-info.outputs.rules-directory }}
+        key: ${{ steps.cache-info.outputs.rules-key }}

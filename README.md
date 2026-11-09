@@ -1,5 +1,32 @@
 # Bearer Action
 
+This is CanalsAI's modified fork of [Bearer/bearer-action](https://github.com/Bearer/bearer-action).
+It adds verified download caching while preserving the upstream scan inputs, outputs, and failure behavior.
+
+## CanalsAI cache behavior
+
+Use `CanalsAI/bearer-action` pinned to a reviewed commit SHA. The default `version: latest`
+refreshes the authenticated GitHub release lookup once per UTC day. A new release selects
+a new binary cache key automatically, without a workflow PR. A failed refresh retains the
+last validated cached release and emits a warning; without a valid release, setup fails.
+An explicit stable version such as `version: '2.1.3'` is also supported.
+
+Release metadata and scanner archives use separate Actions caches. Archives are checked
+against GitHub's release SHA-256 digest on every use and extracted into the job's temporary
+directory. Downloads check HTTP status, retry transient errors, and enter the cache only
+after validation. The floating upstream installer script is no longer executed.
+
+Rule archives retain Bearer's URL-based filenames and automatic rule updates. A daily
+Actions cache with fallback to earlier snapshots restores these archives. Invalid archives
+are removed before and after scanning so an upstream error response cannot poison the
+next retry or be saved to cache. Bearer's rules metadata check still contacts its upstream
+service; this fork does not disable default rules or change scan options.
+
+Requirements: Linux or macOS on x64 or arm64, Bash, curl with `--retry-all-errors`, jq,
+tar, and shasum. The GitHub release must provide a SHA-256 digest for its scanner archive.
+
+## Upstream usage reference
+
 Run [Bearer](https://docs.bearer.com/) as a [GitHub Action](https://github.com/features/actions).
 
 ## Example usage
