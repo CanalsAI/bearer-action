@@ -24,23 +24,24 @@ jobs:
       - name: Prepare scan target
         run: |
           mkdir -p "$RUNNER_TEMP/bearer-smoke/src"
-          printf 'console.log("hello");\n' > "$RUNNER_TEMP/bearer-smoke/src/app.js"
+          printf 'const express = require("express");\nconst app = express();\napp.get("/", (req, res) => res.send(eval(req.query.code)));\n' > "$RUNNER_TEMP/bearer-smoke/src/app.js"
           git -C "$RUNNER_TEMP/bearer-smoke" init -b master
           git -C "$RUNNER_TEMP/bearer-smoke" add src/app.js
           git -C "$RUNNER_TEMP/bearer-smoke" -c user.name=Test -c user.email=test@example.invalid commit -m fixture
-      - name: Scan clean target
+      - name: Scan target with findings
+        id: finding
+        continue-on-error: true
         uses: ./
         with:
           scanner: secrets,sast
           exit-code: 1
           severity: medium,high,critical
           path: ${{ runner.temp }}/bearer-smoke
-      - name: Add a security finding
+      - name: Clear the security finding
         run: |
-          printf 'const express = require("express");\nconst app = express();\napp.get("/", (req, res) => res.send(eval(req.query.code)));\n' > "$RUNNER_TEMP/bearer-smoke/src/app.js"
+          printf 'console.log("hello");\n' > "$RUNNER_TEMP/bearer-smoke/src/app.js"
       - name: Scan with warm caches
-        id: finding
-        continue-on-error: true
+        id: warm
         uses: ./
         with:
           scanner: secrets,sast
@@ -51,8 +52,8 @@ jobs:
         env:
           OUTCOME: ${{ steps.finding.outcome }}
           SCAN_EXIT_CODE: ${{ steps.finding.outputs.exit_code }}
-          BINARY_CACHE_HIT: ${{ steps.finding.outputs.binary_cache_hit }}
-          RULES_CACHE_HIT: ${{ steps.finding.outputs.rules_cache_hit }}
+          BINARY_CACHE_HIT: ${{ steps.warm.outputs.binary_cache_hit }}
+          RULES_CACHE_HIT: ${{ steps.warm.outputs.rules_cache_hit }}
           FINDINGS: ${{ steps.finding.outputs.rule_breaches }}
         run: |
           test "$OUTCOME" = failure

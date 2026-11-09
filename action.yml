@@ -187,7 +187,12 @@ runs:
         BEARER_RULES_DIRECTORY: ${{ steps.cache-info.outputs.rules-directory }}
       run: bash "$GITHUB_ACTION_PATH/scripts/validate-rules.sh"
     - uses: actions/cache/save@27d5ce7f107fe9357f9df03efb73ab90386fccae
-      if: success() && steps.run.outcome == 'success' && steps.rules-cache.outputs.cache-hit != 'true'
+      if: >-
+        always() &&
+        (steps.run.outcome == 'success' || steps.run.outcome == 'failure') &&
+        steps.validate-rules.outcome == 'success' &&
+        steps.validate-rules.outputs.has-archives == 'true' &&
+        steps.rules-cache.outputs.cache-hit != 'true'
       with:
         path: ${{ steps.cache-info.outputs.rules-directory }}
         key: ${{ steps.cache-info.outputs.rules-key }}

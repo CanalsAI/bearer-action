@@ -27,6 +27,7 @@ are removed before and after scanning so an upstream error response cannot poiso
 next retry or be saved to cache. Bearer's rules metadata check still contacts its upstream
 service; this fork does not disable default rules or change scan options. The scanner age
 gate does not apply to Bearer's separately downloaded rules.
+Valid rule archives are cached even when security findings fail a scan; the scan still fails.
 
 Requirements: Linux or macOS on x64 or arm64, Bash, curl with `--retry-all-errors`, jq,
 tar, and shasum. The GitHub release must provide a SHA-256 digest for its scanner archive.

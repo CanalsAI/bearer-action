@@ -33,6 +33,6 @@ today=$(date -u +%F)
   echo "release-prefix=$prefix"
   echo "release-key=${prefix}${today}"
   echo "rules-directory=${TMPDIR:-/tmp}/bearer-rules"
-  echo "rules-prefix=bearer-rules-v1-"
-  echo "rules-key=bearer-rules-v1-${today}"
+  echo "rules-prefix=bearer-rules-v2-"
+  echo "rules-key=bearer-rules-v2-${today}"
 } >> "$GITHUB_OUTPUT"

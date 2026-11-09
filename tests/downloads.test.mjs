@@ -191,4 +191,5 @@ test('removes a poisoned rule download while preserving a valid cached archive',
   assert.equal(f.run('validate-rules.sh').status, 0);
   assert.equal(existsSync(poisoned), false);
   assert.deepEqual(readFileSync(valid), readFileSync(f.archive));
+  assert.equal(f.outputs()['has-archives'], 'true');
 });
