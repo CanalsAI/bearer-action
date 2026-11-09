@@ -73,7 +73,11 @@ cp "$FAKE_DOWNLOAD" "$output"
         draft: false,
         prerelease: false,
         published_at: new Date(Date.now() - ageDays * 24 * 60 * 60 * 1000).toISOString().replace(/\.\d{3}Z$/, 'Z'),
-        assets: [{ name: `bearer_${version}_linux_amd64.tar.gz`, digest: `sha256:${digest}` }],
+        assets: [{
+          name: `bearer_${version}_linux_amd64.tar.gz`,
+          digest: `sha256:${digest}`,
+          created_at: new Date(Date.now() - ageDays * 24 * 60 * 60 * 1000).toISOString().replace(/\.\d{3}Z$/, 'Z'),
+        }],
       };
     },
     release(version = '2.1.3', digest = checksum) {
@@ -140,6 +144,10 @@ test('selects the highest eligible version while quarantining new releases and d
     f.releaseData('2.1.9'),
     f.releaseData('2.1.10', 'a'.repeat(64), 8),
     f.releaseData('2.1.11', 'b'.repeat(64), 1),
+    {
+      ...f.releaseData('2.1.12'),
+      assets: f.releaseData('2.1.12', 'c'.repeat(64), 1).assets,
+    },
     { ...f.releaseData('3.0.0'), draft: true },
     { ...f.releaseData('4.0.0'), prerelease: true },
     {

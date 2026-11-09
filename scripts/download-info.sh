@@ -14,6 +14,7 @@ release_info() {
       .assets[] |
       select(.name == "bearer_" + ($release.tag_name | ltrimstr("v")) + "_" + $platform + ".tar.gz") |
       select((.digest // "") | test("^sha256:[a-f0-9]{64}$")) |
+      select((.created_at | fromdateiso8601) <= $cutoff) |
       {
         tag: $release.tag_name,
         name: .name,

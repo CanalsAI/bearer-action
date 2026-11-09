@@ -7,7 +7,9 @@ It adds verified download caching while preserving the upstream scan inputs, out
 
 Use `CanalsAI/bearer-action` pinned to a reviewed commit SHA. The default `version: latest`
 refreshes the authenticated GitHub release lookup once per UTC day and selects the highest
-stable version published at least eight days ago. New releases become eligible automatically
+stable version whose release and binary asset were published at least eight days ago.
+Replacing an asset on an older release starts a new quarantine for that asset.
+New releases become eligible automatically
 after that quarantine and select a new binary cache key without a workflow PR. Prereleases
 and drafts are excluded. A failed refresh retains the
 last validated cached release and emits a warning; without a valid release, setup fails.
